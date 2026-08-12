@@ -14,7 +14,7 @@ try {
 setLoading(true);
 
   const res = await axios.post(
-    "http://localhost:5000/auth/login",
+    "${VITE_API_URL}/auth/login",
     {
       email,
       password,
@@ -93,3 +93,5 @@ return ( <div className="flex min-h-screen items-center justify-center bg-gradie
 
 );
 }
+
+

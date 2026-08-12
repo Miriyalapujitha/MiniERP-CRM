@@ -22,9 +22,9 @@ export default function Dashboard() {
     const load = async () => {
       try {
         const [customers, products, challans] = await Promise.all([
-          axios.get("http://localhost:5000/customers"),
-          axios.get("http://localhost:5000/products?limit=100"),
-          axios.get("http://localhost:5000/challans"),
+          axios.get("${VITE_API_URL}/customers"),
+          axios.get("${VITE_API_URL}/products?limit=100"),
+          axios.get("${VITE_API_URL}/challans"),
         ]);
 
         const revenue = challans.data.length * 25000;
@@ -209,3 +209,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

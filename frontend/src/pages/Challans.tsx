@@ -16,9 +16,9 @@ const [items, setItems] = useState([
 
 const loadData = async () => {
 const [c, p, ch] = await Promise.all([
-axios.get("http://localhost:5000/customers"),
-axios.get("http://localhost:5000/products?limit=100"),
-axios.get("http://localhost:5000/challans"),
+axios.get("${VITE_API_URL}/customers"),
+axios.get("${VITE_API_URL}/products?limit=100"),
+axios.get("${VITE_API_URL}/challans"),
 ]);
 
 setCustomers(c.data);
@@ -59,7 +59,7 @@ const totalQuantity = items.reduce(
 
 const createChallan = async () => {
 try {
-await axios.post("http://localhost:5000/challans", {
+await axios.post("${VITE_API_URL}/challans", {
 customerId: Number(customerId),
 userId: 1,
 status,
@@ -260,3 +260,5 @@ Create draft or confirmed challans with stock tracking </p> </div>
 
 );
 }
+
+

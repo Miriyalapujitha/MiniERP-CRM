@@ -1,5 +1,7 @@
+
 import { Routes, Route, Link, Navigate } from "react-router-dom";
-import { useEffect, useState, ReactNode } from "react";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import {
   LayoutDashboard,
   Users,
