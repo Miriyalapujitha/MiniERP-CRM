@@ -51,19 +51,35 @@ export default function Customers() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CustomerForm>(emptyForm);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
+  // ================= GET CUSTOMERS =================
   const loadCustomers = async () => {
     try {
       setLoading(true);
+
+      console.log("Loading customers from:", API_URL);
 
       const res = await axios.get(
         `${API_URL}/customers?search=${encodeURIComponent(search)}`
       );
 
+      console.log("Customers response:", res.data);
+
       setCustomers(res.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load customers:", error);
-      alert("Failed to load customers");
+      console.error("Response:", error?.response);
+      console.error("Response data:", error?.response?.data);
+
+      const message =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.response?.data?.details ||
+        error?.message ||
+        "Failed to load customers";
+
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -73,6 +89,7 @@ export default function Customers() {
     loadCustomers();
   }, [search]);
 
+  // ================= SAVE CUSTOMER =================
   const saveCustomer = async () => {
     try {
       if (!form.name.trim()) {
@@ -85,18 +102,59 @@ export default function Customers() {
         return;
       }
 
+      if (!form.email.trim()) {
+        alert("Email is required");
+        return;
+      }
+
+      setSaving(true);
+
+      // Make sure enum values are always Prisma-compatible
+      const customerData = {
+        name: form.name.trim(),
+        mobile: form.mobile.trim(),
+        email: form.email.trim(),
+        businessName: form.businessName.trim(),
+        gstNumber: form.gstNumber.trim(),
+        type: form.type.trim().toUpperCase(),
+        address: form.address.trim(),
+        status: form.status.trim().toUpperCase(),
+        followUpDate: form.followUpDate || "",
+        notes: form.notes.trim(),
+      };
+
+      console.log("=================================");
+      console.log("Saving customer");
+      console.log("API URL:", API_URL);
+      console.log("Customer data:", customerData);
+      console.log("=================================");
+
       if (editingId !== null) {
-        await axios.put(
+        const response = await axios.put(
           `${API_URL}/customers/${editingId}`,
-          form
+          customerData,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
         );
+
+        console.log("Update response:", response.data);
 
         alert("Customer updated successfully");
       } else {
-        await axios.post(
+        const response = await axios.post(
           `${API_URL}/customers`,
-          form
+          customerData,
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
         );
+
+        console.log("Create response:", response.data);
 
         alert("Customer created successfully");
       }
@@ -106,15 +164,35 @@ export default function Customers() {
 
       await loadCustomers();
     } catch (error: any) {
-      console.error("Failed to save customer:", error);
+      console.error("=================================");
+      console.error("FAILED TO SAVE CUSTOMER");
+      console.error("Error:", error);
+      console.error("Message:", error?.message);
+      console.error("Response:", error?.response);
+      console.error("Status:", error?.response?.status);
+      console.error("Response data:", error?.response?.data);
+      console.error("=================================");
 
-      alert(
-        error?.response?.data?.message ||
-          "Failed to save customer"
-      );
+      const responseData = error?.response?.data;
+
+      const serverError =
+        responseData?.error ||
+        responseData?.message ||
+        responseData?.details;
+
+      if (serverError) {
+        alert(`Failed to save customer:\n\n${serverError}`);
+      } else if (error?.message) {
+        alert(`Failed to save customer:\n\n${error.message}`);
+      } else {
+        alert("Failed to save customer");
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
+  // ================= EDIT CUSTOMER =================
   const editCustomer = (customer: Customer) => {
     setEditingId(customer.id);
 
@@ -124,12 +202,21 @@ export default function Customers() {
       email: customer.email || "",
       businessName: customer.businessName || "",
       gstNumber: customer.gstNumber || "",
-      type: customer.type || "RETAIL",
+
+      type: customer.type
+        ? customer.type.toUpperCase()
+        : "RETAIL",
+
       address: customer.address || "",
-      status: customer.status || "LEAD",
+
+      status: customer.status
+        ? customer.status.toUpperCase()
+        : "LEAD",
+
       followUpDate: customer.followUpDate
         ? customer.followUpDate.substring(0, 10)
         : "",
+
       notes: customer.notes || "",
     });
 
@@ -139,6 +226,7 @@ export default function Customers() {
     });
   };
 
+  // ================= ADD FOLLOW-UP =================
   const addFollowUp = async (id: number) => {
     const note = prompt("Enter follow-up note");
 
@@ -151,6 +239,11 @@ export default function Customers() {
         `${API_URL}/customers/${id}/followups`,
         {
           note: note.trim(),
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
         }
       );
 
@@ -159,14 +252,21 @@ export default function Customers() {
       await loadCustomers();
     } catch (error: any) {
       console.error("Failed to add follow-up:", error);
+      console.error("Response:", error?.response);
+      console.error("Response data:", error?.response?.data);
 
-      alert(
+      const message =
+        error?.response?.data?.error ||
         error?.response?.data?.message ||
-          "Failed to add follow-up"
-      );
+        error?.response?.data?.details ||
+        error?.message ||
+        "Failed to add follow-up";
+
+      alert(message);
     }
   };
 
+  // ================= RESET FORM =================
   const resetForm = () => {
     setEditingId(null);
     setForm(emptyForm);
@@ -174,8 +274,7 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
-
-      {/* Header */}
+      {/* ================= HEADER ================= */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">
@@ -196,7 +295,7 @@ export default function Customers() {
         </button>
       </div>
 
-      {/* Search */}
+      {/* ================= SEARCH ================= */}
       <div className="relative">
         <Search
           className="absolute left-4 top-3.5 text-slate-400"
@@ -211,7 +310,7 @@ export default function Customers() {
         />
       </div>
 
-      {/* Customer Form */}
+      {/* ================= CUSTOMER FORM ================= */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-800">
@@ -231,7 +330,6 @@ export default function Customers() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
           {/* Name */}
           <input
             className="rounded-xl border p-3"
@@ -309,17 +407,9 @@ export default function Customers() {
               })
             }
           >
-            <option value="RETAIL">
-              Retail
-            </option>
-
-            <option value="WHOLESALE">
-              Wholesale
-            </option>
-
-            <option value="DISTRIBUTOR">
-              Distributor
-            </option>
+            <option value="RETAIL">Retail</option>
+            <option value="WHOLESALE">Wholesale</option>
+            <option value="DISTRIBUTOR">Distributor</option>
           </select>
 
           {/* Address */}
@@ -346,17 +436,9 @@ export default function Customers() {
               })
             }
           >
-            <option value="LEAD">
-              Lead
-            </option>
-
-            <option value="ACTIVE">
-              Active
-            </option>
-
-            <option value="INACTIVE">
-              Inactive
-            </option>
+            <option value="LEAD">Lead</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
           </select>
 
           {/* Follow-up */}
@@ -387,12 +469,16 @@ export default function Customers() {
           />
         </div>
 
+        {/* ================= BUTTONS ================= */}
         <div className="mt-5 flex gap-3">
           <button
             onClick={saveCustomer}
-            className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700"
+            disabled={saving}
+            className="rounded-xl bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {editingId !== null
+            {saving
+              ? "Saving..."
+              : editingId !== null
               ? "Update Customer"
               : "Save Customer"}
           </button>
@@ -400,6 +486,7 @@ export default function Customers() {
           {editingId !== null && (
             <button
               onClick={resetForm}
+              disabled={saving}
               className="rounded-xl bg-slate-100 px-6 py-3 text-slate-700 hover:bg-slate-200"
             >
               Cancel
@@ -408,36 +495,18 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Customer Table */}
+      {/* ================= CUSTOMER TABLE ================= */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
-
             <thead className="bg-slate-50 text-sm font-semibold text-slate-600">
               <tr>
-                <th className="p-4">
-                  Customer
-                </th>
-
-                <th className="p-4">
-                  Business
-                </th>
-
-                <th className="p-4">
-                  Status
-                </th>
-
-                <th className="p-4">
-                  Type
-                </th>
-
-                <th className="p-4">
-                  Follow-up
-                </th>
-
-                <th className="p-4">
-                  Actions
-                </th>
+                <th className="p-4">Customer</th>
+                <th className="p-4">Business</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Type</th>
+                <th className="p-4">Follow-up</th>
+                <th className="p-4">Actions</th>
               </tr>
             </thead>
 
@@ -466,7 +535,6 @@ export default function Customers() {
                     key={customer.id}
                     className="border-t border-slate-100 hover:bg-slate-50"
                   >
-
                     {/* Customer */}
                     <td className="p-4">
                       <div>
@@ -523,7 +591,6 @@ export default function Customers() {
                     {/* Actions */}
                     <td className="p-4">
                       <div className="flex gap-2">
-
                         {/* View */}
                         <button
                           onClick={() =>
@@ -566,18 +633,15 @@ Notes: ${customer.notes || "No notes"}`
                         >
                           Follow-up
                         </button>
-
                       </div>
                     </td>
                   </tr>
                 ))
               )}
             </tbody>
-
           </table>
         </div>
       </div>
-
     </div>
   );
 }
