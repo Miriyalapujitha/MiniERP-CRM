@@ -24,55 +24,28 @@ export default function Login() {
 
       console.log("Login API:", `${API_URL}/auth/login`);
 
-      const res = await axios.post(
-        `${API_URL}/auth/login`,
-        {
-          email,
-          password,
-        }
-      );
+      const res = await axios.post(`${API_URL}/auth/login`, {
+        email: email.trim(),
+        password,
+      });
 
       console.log("Login response:", res.data);
 
-      // Save authentication data
       localStorage.setItem("token", res.data.token);
+      localStorage.setItem("role", res.data.user.role);
+      localStorage.setItem("userName", res.data.user.name);
 
-      if (res.data.user) {
-        localStorage.setItem(
-          "role",
-          res.data.user.role || ""
-        );
-
-        localStorage.setItem(
-          "userName",
-          res.data.user.name || ""
-        );
-      }
-
-      // Notify other components that login happened
       window.dispatchEvent(new Event("storage"));
 
-      // Go to dashboard
       navigate("/dashboard");
     } catch (err: any) {
       console.error("Login error:", err);
 
-      if (err.response) {
-        console.error("Status:", err.response.status);
-        console.error("Response:", err.response.data);
-
-        alert(
-          err.response.data?.error ||
-            err.response.data?.message ||
-            "Login failed"
-        );
-      } else if (err.request) {
-        alert(
-          "Unable to connect to the backend. Please check the Render server."
-        );
-      } else {
-        alert("Login failed. Please try again.");
-      }
+      alert(
+        err.response?.data?.error ||
+          err.response?.data?.message ||
+          "Login failed"
+      );
     } finally {
       setLoading(false);
     }
@@ -82,7 +55,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800">
       <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
 
-        {/* Header */}
+        {/* Logo */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white">
             <Shield size={32} />
@@ -110,8 +83,8 @@ export default function Login() {
 
           <input
             className="w-full rounded-xl border border-slate-300 px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            type="password"
             placeholder="Password"
+            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => {
@@ -124,13 +97,11 @@ export default function Login() {
           <button
             onClick={login}
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
             <Lock size={18} />
 
-            {loading
-              ? "Signing in..."
-              : "Sign In"}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </div>
 
@@ -156,6 +127,7 @@ export default function Login() {
             Accounts: accounts2@example.com / accounts123
           </p>
         </div>
+
       </div>
     </div>
   );

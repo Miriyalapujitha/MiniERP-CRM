@@ -10,9 +10,19 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
 
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        error: "Name, email and password are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: {
+        email: normalizedEmail,
+      },
     });
 
     if (existingUser) {
@@ -28,7 +38,7 @@ router.post("/register", async (req, res) => {
     const user = await prisma.user.create({
       data: {
         name,
-        email,
+        email: normalizedEmail,
         password: hashed,
         role,
       },
@@ -37,14 +47,14 @@ router.post("/register", async (req, res) => {
     // Remove password from response
     const { password: _, ...safeUser } = user;
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Registration successful",
       user: safeUser,
     });
   } catch (err) {
     console.error("Registration error:", err);
 
-    res.status(400).json({
+    return res.status(400).json({
       error: "Registration failed",
     });
   }
@@ -55,21 +65,40 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Email and password are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    console.log("Login attempt:", normalizedEmail);
+
     // Find user
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: {
+        email: normalizedEmail,
+      },
     });
 
     if (!user) {
+      console.log("User not found:", normalizedEmail);
+
       return res.status(401).json({
         error: "Invalid credentials",
       });
     }
 
     // Compare password
-    const match = await bcrypt.compare(password, user.password);
+    const match = await bcrypt.compare(
+      password,
+      user.password
+    );
 
     if (!match) {
+      console.log("Incorrect password:", normalizedEmail);
+
       return res.status(401).json({
         error: "Invalid credentials",
       });
@@ -90,7 +119,9 @@ router.post("/login", async (req, res) => {
     // Remove password from response
     const { password: _, ...safeUser } = user;
 
-    res.json({
+    console.log("Login successful:", normalizedEmail);
+
+    return res.json({
       message: "Login successful",
       token,
       user: safeUser,
@@ -98,7 +129,7 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error("Login error:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       error: "Login failed",
     });
   }
