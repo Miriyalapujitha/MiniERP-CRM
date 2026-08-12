@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
-  user?: any;
+  user?: { id: number; role: string };
 }
 
 export const verifyToken = (
@@ -12,12 +12,14 @@ export const verifyToken = (
 ) => {
   const auth = req.headers.authorization;
 
-  if (!auth) return res.status(401).json({ error: "Token missing" });
+  if (!auth?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Bearer token missing" });
+  }
 
-  const token = auth.split(" ")[1];
+  const token = auth.slice("Bearer ".length);
 
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET || "secret");
+    req.user = jwt.verify(token, process.env.JWT_SECRET!) as AuthRequest["user"];
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });

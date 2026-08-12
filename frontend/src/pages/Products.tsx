@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { Search, Plus, Pencil, Package } from "lucide-react";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface Product {
   id: number;
@@ -47,9 +44,7 @@ export default function Products() {
     try {
       setLoading(true);
 
-      const res = await axios.get(
-        `${API_URL}/products?limit=100`
-      );
+      const res = await api.get("/products?limit=100");
 
       const productData: Product[] = res.data;
 
@@ -90,24 +85,11 @@ export default function Products() {
       }
 
       if (editingId !== null) {
-        await axios.put(
-          `${API_URL}/products/${editingId}`,
-          form
-        );
+        await api.put(`/products/${editingId}`, form);
 
         alert("Product updated successfully");
       } else {
-        await axios.post(
-          `${API_URL}/products`,
-          form,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem(
-                "token"
-              )}`,
-            },
-          }
-        );
+        await api.post("/products", form);
 
         alert("Product created successfully");
       }
@@ -120,7 +102,8 @@ export default function Products() {
       console.error("Failed to save product:", error);
 
       alert(
-        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+          error?.response?.data?.message ||
           "Failed to save product"
       );
     }

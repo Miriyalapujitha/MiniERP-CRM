@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { Search, Plus, Eye, Pencil } from "lucide-react";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface Customer {
   id: number;
@@ -58,11 +55,7 @@ export default function Customers() {
     try {
       setLoading(true);
 
-      console.log("Loading customers from:", API_URL);
-
-      const res = await axios.get(
-        `${API_URL}/customers?search=${encodeURIComponent(search)}`
-      );
+      const res = await api.get(`/customers?search=${encodeURIComponent(search)}`);
 
       console.log("Customers response:", res.data);
 
@@ -125,34 +118,17 @@ export default function Customers() {
 
       console.log("=================================");
       console.log("Saving customer");
-      console.log("API URL:", API_URL);
       console.log("Customer data:", customerData);
       console.log("=================================");
 
       if (editingId !== null) {
-        const response = await axios.put(
-          `${API_URL}/customers/${editingId}`,
-          customerData,
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const response = await api.put(`/customers/${editingId}`, customerData);
 
         console.log("Update response:", response.data);
 
         alert("Customer updated successfully");
       } else {
-        const response = await axios.post(
-          `${API_URL}/customers`,
-          customerData,
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        const response = await api.post("/customers", customerData);
 
         console.log("Create response:", response.data);
 
@@ -235,17 +211,7 @@ export default function Customers() {
     }
 
     try {
-      await axios.post(
-        `${API_URL}/customers/${id}/followups`,
-        {
-          note: note.trim(),
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      await api.post(`/customers/${id}/followups`, { note: note.trim() });
 
       alert("Follow-up added successfully");
 

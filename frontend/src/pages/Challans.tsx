@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { Plus, Trash2, Receipt } from "lucide-react";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface Customer {
   id: number;
@@ -57,13 +54,11 @@ export default function Challans() {
       setLoading(true);
 
       console.log("Loading challan data...");
-      console.log("API URL:", API_URL);
-
       const [customersResponse, productsResponse, challansResponse] =
         await Promise.all([
-          axios.get(`${API_URL}/customers`),
-          axios.get(`${API_URL}/products?limit=100`),
-          axios.get(`${API_URL}/challans`),
+          api.get("/customers"),
+          api.get("/products?limit=100"),
+          api.get("/challans"),
         ]);
 
       console.log("Customers:", customersResponse.data);
@@ -206,11 +201,6 @@ export default function Challans() {
       const payload = {
         customerId: Number(customerId),
 
-        // IMPORTANT:
-        // This assumes your backend accepts userId.
-        // Change this if your login system provides another user ID.
-        userId: 1,
-
         status: status.toUpperCase(),
 
         products: items.map((item) => ({
@@ -221,19 +211,10 @@ export default function Challans() {
 
       console.log("================================");
       console.log("Creating challan");
-      console.log("API URL:", API_URL);
       console.log("Payload:", payload);
       console.log("================================");
 
-      const response = await axios.post(
-        `${API_URL}/challans`,
-        payload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await api.post("/challans", payload);
 
       console.log("Challan created:", response.data);
 

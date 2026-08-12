@@ -51,7 +51,9 @@ export default function App() {
   }, []);
 
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("userName");
     setRole(null);
     window.location.href = "/";
   };

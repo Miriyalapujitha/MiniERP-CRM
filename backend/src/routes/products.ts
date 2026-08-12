@@ -1,14 +1,39 @@
 import { Router } from "express";
 import prisma from "../prisma";
-import { verifyToken, allowRoles } from "../middleware/auth";
+import { verifyToken, allowRoles, AuthRequest } from "../middleware/auth";
 
 const router = Router();
 
+function productInput(body: Record<string, unknown>) {
+  const name = String(body.name ?? "").trim();
+  const sku = String(body.sku ?? "").trim();
+  const category = String(body.category ?? "").trim();
+  const warehouse = String(body.warehouse ?? "").trim();
+  const unitPrice = Number(body.unitPrice);
+  const minimumStock = Number(body.minimumStock);
+
+  if (!name || !sku || !category || !warehouse) {
+    throw new Error("Product name, SKU, category and warehouse are required");
+  }
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+    throw new Error("Unit price must be a non-negative number");
+  }
+  if (!Number.isInteger(minimumStock) || minimumStock < 0) {
+    throw new Error("Minimum stock must be a non-negative integer");
+  }
+
+  return { name, sku, category, warehouse, unitPrice, minimumStock };
+}
+
 // ================= GET ALL PRODUCTS =================
-router.get("/", async (req, res) => {
+router.get("/", verifyToken, async (req, res) => {
   try {
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 10);
+
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({ error: "page must be positive and limit must be between 1 and 100" });
+    }
 
     const skip = (page - 1) * limit;
 
@@ -28,7 +53,7 @@ router.get("/", async (req, res) => {
 });
 
 // ================= GET SINGLE PRODUCT =================
-router.get("/:id", async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
     const productId = Number(req.params.id);
 
@@ -60,10 +85,16 @@ router.post(
   "/",
   verifyToken,
   allowRoles("ADMIN", "WAREHOUSE"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     try {
+      const input = productInput(req.body);
+      const currentStock = Number(req.body.currentStock);
+      if (!Number.isInteger(currentStock) || currentStock < 0) {
+        return res.status(400).json({ error: "Current stock must be a non-negative integer" });
+      }
+
       const product = await prisma.product.create({
-        data: req.body,
+        data: { ...input, currentStock },
       });
 
       res.status(201).json(product);
@@ -98,11 +129,13 @@ router.put(
         });
       }
 
+      const input = productInput(req.body);
       const product = await prisma.product.update({
         where: {
           id: productId,
         },
-        data: req.body,
+        // Stock can only change through the movement endpoint so it remains auditable.
+        data: input,
       });
 
       res.json(product);
@@ -122,14 +155,13 @@ router.post(
   "/movement",
   verifyToken,
   allowRoles("ADMIN", "WAREHOUSE"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     try {
       const {
         productId,
         quantity,
         type,
         reason,
-        createdBy,
       } = req.body;
 
       // Validate type
@@ -146,59 +178,45 @@ router.post(
         });
       }
 
-      // Find product
-      const product = await prisma.product.findUnique({
-        where: {
-          id: productId,
-        },
-      });
-
-      if (!product) {
-        return res.status(404).json({
-          error: "Product not found",
-        });
+      if (!Number.isInteger(productId) || !Number.isInteger(quantity) || !String(reason ?? "").trim()) {
+        return res.status(400).json({ error: "Product ID, integer quantity, and reason are required" });
       }
 
-      // Calculate new stock
-      const newStock =
-        type === "IN"
-          ? product.currentStock + quantity
-          : product.currentStock - quantity;
+      const updatedProduct = await prisma.$transaction(async (tx) => {
+        if (type === "OUT") {
+          const result = await tx.product.updateMany({
+            where: { id: productId, currentStock: { gte: quantity } },
+            data: { currentStock: { decrement: quantity } },
+          });
+          if (result.count === 0) throw new Error("INSUFFICIENT_STOCK");
+        } else {
+          const result = await tx.product.updateMany({
+            where: { id: productId },
+            data: { currentStock: { increment: quantity } },
+          });
+          if (result.count === 0) throw new Error("PRODUCT_NOT_FOUND");
+        }
 
-      // Prevent negative stock
-      if (newStock < 0) {
-        return res.status(400).json({
-          error: "Insufficient stock",
+        const product = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+        await tx.stockMovement.create({
+          data: { productId, quantity, type, reason: String(reason).trim(), createdBy: String(req.user?.id ?? "SYSTEM") },
         });
-      }
-
-      // Create stock movement
-      await prisma.stockMovement.create({
-        data: {
-          productId,
-          quantity,
-          type,
-          reason,
-          createdBy: createdBy || "SYSTEM",
-        },
-      });
-
-      // Update product stock
-      await prisma.product.update({
-        where: {
-          id: productId,
-        },
-        data: {
-          currentStock: newStock,
-        },
+        return product;
       });
 
       res.json({
         message: "Stock updated successfully",
-        newStock,
+        newStock: updatedProduct.currentStock,
       });
     } catch (error) {
       console.error("Stock movement error:", error);
+
+      if (error instanceof Error && error.message === "INSUFFICIENT_STOCK") {
+        return res.status(400).json({ error: "Insufficient stock" });
+      }
+      if (error instanceof Error && error.message === "PRODUCT_NOT_FOUND") {
+        return res.status(404).json({ error: "Product not found" });
+      }
 
       res.status(500).json({
         error: "Failed to update stock",

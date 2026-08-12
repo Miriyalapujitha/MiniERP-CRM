@@ -1,10 +1,7 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../api";
 import { useNavigate } from "react-router-dom";
 import { Shield, Lock } from "lucide-react";
-
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -22,9 +19,7 @@ export default function Login() {
     try {
       setLoading(true);
 
-      console.log("Login API:", `${API_URL}/auth/login`);
-
-      const res = await axios.post(`${API_URL}/auth/login`, {
+      const res = await api.post("/auth/login", {
         email: email.trim(),
         password,
       });

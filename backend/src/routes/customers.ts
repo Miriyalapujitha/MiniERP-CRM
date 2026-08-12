@@ -2,11 +2,12 @@ import { Router } from "express";
 import prisma from "../prisma";
 import { body, validationResult } from "express-validator";
 import { CustomerStatus, CustomerType } from "@prisma/client";
+import { allowRoles, verifyToken } from "../middleware/auth";
 
 const router = Router();
 
 // ================= GET ALL CUSTOMERS =================
-router.get("/", async (req, res) => {
+router.get("/", verifyToken, async (req, res) => {
   try {
     const search = String(req.query.search || "").trim();
 
@@ -36,7 +37,7 @@ router.get("/", async (req, res) => {
 });
 
 // ================= GET CUSTOMER BY ID =================
-router.get("/:id", async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
     const customerId = Number(req.params.id);
 
@@ -70,7 +71,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // ================= ADD FOLLOW-UP NOTE =================
-router.post("/:id/followups", async (req, res) => {
+router.post("/:id/followups", verifyToken, allowRoles("ADMIN", "SALES"), async (req, res) => {
   try {
     const customerId = Number(req.params.id);
     const note = String(req.body.note || "").trim();
@@ -120,6 +121,8 @@ router.post("/:id/followups", async (req, res) => {
 // ================= CREATE CUSTOMER =================
 router.post(
   "/",
+  verifyToken,
+  allowRoles("ADMIN", "SALES"),
   body("name")
     .trim()
     .notEmpty()
@@ -266,7 +269,7 @@ router.post(
 );
 
 // ================= UPDATE CUSTOMER =================
-router.put("/:id", async (req, res) => {
+router.put("/:id", verifyToken, allowRoles("ADMIN", "SALES"), async (req, res) => {
   try {
     const customerId = Number(req.params.id);
 
@@ -313,6 +316,10 @@ router.put("/:id", async (req, res) => {
     ).trim();
     const customerAddress = String(address || "").trim();
     const customerNotes = String(notes || "").trim();
+
+    if (!customerName || !/^\S+@\S+\.\S+$/.test(customerEmail)) {
+      return res.status(400).json({ error: "Customer name and a valid email are required" });
+    }
 
     const customerType = String(type || "RETAIL")
       .trim()

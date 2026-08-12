@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api";
 import {
   Users,
   Package,
@@ -22,17 +22,27 @@ export default function Dashboard() {
     const load = async () => {
       try {
         const [customers, products, challans] = await Promise.all([
-          axios.get("${VITE_API_URL}/customers"),
-          axios.get("${VITE_API_URL}/products?limit=100"),
-          axios.get("${VITE_API_URL}/challans"),
+          api.get("/customers"),
+          api.get("/products?limit=100"),
+          api.get("/challans"),
         ]);
 
-        const revenue = challans.data.length * 25000;
+        const confirmedChallans = challans.data.filter(
+          (challan: { status: string }) => challan.status === "CONFIRMED"
+        );
+        const revenue = confirmedChallans.reduce(
+          (total: number, challan: { items?: { productPrice: number; quantity: number }[] }) =>
+            total + (challan.items ?? []).reduce(
+              (itemTotal, item) => itemTotal + item.productPrice * item.quantity,
+              0
+            ),
+          0
+        );
 
         setStats({
           customers: customers.data.length,
           products: products.data.length,
-          challans: challans.data.length,
+          challans: confirmedChallans.length,
           revenue,
         });
       } catch (err) {

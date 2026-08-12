@@ -2,6 +2,7 @@ import { Router } from "express";
 import { ChallanStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
 import prisma from "../prisma";
+import { allowRoles, AuthRequest, verifyToken } from "../middleware/auth";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ type ProductLine = {
 };
 
 // ================= GET ALL CHALLANS =================
-router.get("/", async (req, res) => {
+router.get("/", verifyToken, async (req, res) => {
   try {
     const challans = await prisma.challan.findMany({
       include: {
@@ -32,12 +33,13 @@ router.get("/", async (req, res) => {
 });
 
 // ================= CREATE CHALLAN =================
-router.post("/", async (req, res) => {
+router.post("/", verifyToken, allowRoles("ADMIN", "SALES", "ACCOUNTS"), async (req: AuthRequest, res) => {
   try {
-    const { customerId, userId, products, status = ChallanStatus.DRAFT } = req.body;
+    const { customerId, products, status = ChallanStatus.DRAFT } = req.body;
+    const userId = req.user!.id;
 
-    if (!Number.isInteger(customerId) || !Number.isInteger(userId)) {
-      return res.status(400).json({ error: "Valid customerId and userId are required" });
+    if (!Number.isInteger(customerId)) {
+      return res.status(400).json({ error: "A valid customerId is required" });
     }
 
     if (!Object.values(ChallanStatus).includes(status)) {
