@@ -1,7 +1,14 @@
 import { Router } from "express";
+import { ChallanStatus } from "@prisma/client";
+import { randomUUID } from "crypto";
 import prisma from "../prisma";
 
 const router = Router();
+
+type ProductLine = {
+  productId: number;
+  quantity: number;
+};
 
 // ================= GET ALL CHALLANS =================
 router.get("/", async (req, res) => {
@@ -27,119 +34,129 @@ router.get("/", async (req, res) => {
 // ================= CREATE CHALLAN =================
 router.post("/", async (req, res) => {
   try {
-    const { customerId, userId, products, status } = req.body;
+    const { customerId, userId, products, status = ChallanStatus.DRAFT } = req.body;
 
-    // Validate products
-    if (!products || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({
-        error: "Products are required",
-      });
+    if (!Number.isInteger(customerId) || !Number.isInteger(userId)) {
+      return res.status(400).json({ error: "Valid customerId and userId are required" });
     }
 
-    // Generate challan number
-    const count = await prisma.challan.count();
-    const challanNumber = `CH-${1001 + count}`;
+    if (!Object.values(ChallanStatus).includes(status)) {
+      return res.status(400).json({ error: "Invalid challan status" });
+    }
 
-    let totalQuantity = 0;
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: "Products are required" });
+    }
 
-    // Validate products and stock
-    for (const item of products) {
-      const product = await prisma.product.findUnique({
-        where: {
-          id: item.productId,
-        },
-      });
-
-      if (!product) {
-        return res.status(404).json({
-          error: `Product ${item.productId} not found`,
-        });
+    // Combine duplicate product lines before checking stock or creating items.
+    const quantitiesByProduct = new Map<number, number>();
+    for (const item of products as ProductLine[]) {
+      if (!Number.isInteger(item?.productId) || !Number.isInteger(item?.quantity)) {
+        return res.status(400).json({ error: "Product ID and quantity must be integers" });
       }
 
       if (item.quantity <= 0) {
-        return res.status(400).json({
-          error: "Quantity must be greater than 0",
-        });
+        return res.status(400).json({ error: "Quantity must be greater than 0" });
       }
 
-      if (
-        status === "CONFIRMED" &&
-        product.currentStock < item.quantity
-      ) {
-        return res.status(400).json({
-          error: `Insufficient stock for ${product.name}`,
-        });
-      }
-
-      totalQuantity += item.quantity;
+      quantitiesByProduct.set(
+        item.productId,
+        (quantitiesByProduct.get(item.productId) ?? 0) + item.quantity
+      );
     }
 
-    // Create challan
-    const challan = await prisma.challan.create({
-      data: {
-        challanNumber,
-        totalQuantity,
-        status,
-        customerId,
-        userId,
+    const productLines = Array.from(quantitiesByProduct, ([productId, quantity]) => ({
+      productId,
+      quantity,
+    }));
+    const totalQuantity = productLines.reduce((total, item) => total + item.quantity, 0);
+    const challanNumber = `CH-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
 
-        items: {
-          create: await Promise.all(
-            products.map(async (item: any) => {
-              const product = await prisma.product.findUnique({
-                where: {
-                  id: item.productId,
-                },
-              });
+    const challan = await prisma.$transaction(async (tx) => {
+      const [customer, user, foundProducts] = await Promise.all([
+        tx.customer.findUnique({ where: { id: customerId } }),
+        tx.user.findUnique({ where: { id: userId } }),
+        tx.product.findMany({ where: { id: { in: productLines.map((item) => item.productId) } } }),
+      ]);
 
+      if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+      if (!user) throw new Error("USER_NOT_FOUND");
+
+      const productById = new Map(foundProducts.map((product) => [product.id, product]));
+      for (const item of productLines) {
+        const product = productById.get(item.productId);
+        if (!product) throw new Error(`PRODUCT_NOT_FOUND:${item.productId}`);
+        if (status === ChallanStatus.CONFIRMED && product.currentStock < item.quantity) {
+          throw new Error(`INSUFFICIENT_STOCK:${product.name}`);
+        }
+      }
+
+      if (status === ChallanStatus.CONFIRMED) {
+        for (const item of productLines) {
+          const updated = await tx.product.updateMany({
+            where: { id: item.productId, currentStock: { gte: item.quantity } },
+            data: { currentStock: { decrement: item.quantity } },
+          });
+
+          if (updated.count !== 1) throw new Error("INSUFFICIENT_STOCK");
+        }
+      }
+
+      const createdChallan = await tx.challan.create({
+        data: {
+          challanNumber,
+          totalQuantity,
+          status,
+          customerId,
+          userId,
+          items: {
+            create: productLines.map((item) => {
+              const product = productById.get(item.productId)!;
               return {
-                productId: product!.id,
-                productName: product!.name,
-                productSku: product!.sku,
-                productPrice: product!.unitPrice,
+                productId: product.id,
+                productName: product.name,
+                productSku: product.sku,
+                productPrice: product.unitPrice,
                 quantity: item.quantity,
               };
-            })
-          ),
+            }),
+          },
         },
-      },
+        include: { items: true, customer: true, user: true },
+      });
 
-      include: {
-        items: true,
-        customer: true,
-      },
-    });
-
-    // Update stock if challan is confirmed
-    if (status === "CONFIRMED") {
-      for (const item of products) {
-        await prisma.product.update({
-          where: {
-            id: item.productId,
-          },
-          data: {
-            currentStock: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        // Create stock movement
-        await prisma.stockMovement.create({
-          data: {
+      if (status === ChallanStatus.CONFIRMED) {
+        await tx.stockMovement.createMany({
+          data: productLines.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
             type: "OUT",
-            reason: `Sales Challan ${challan.challanNumber}`,
+            reason: `Sales Challan ${createdChallan.challanNumber}`,
             createdBy: "SYSTEM",
-          },
+          })),
         });
       }
-    }
+
+      return createdChallan;
+    });
 
     res.status(201).json(challan);
   } catch (error) {
     console.error("Create challan error:", error);
+
+    const message = error instanceof Error ? error.message : "";
+    if (message === "CUSTOMER_NOT_FOUND") {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    if (message === "USER_NOT_FOUND") {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (message.startsWith("PRODUCT_NOT_FOUND:")) {
+      return res.status(404).json({ error: `Product ${message.split(":")[1]} not found` });
+    }
+    if (message.startsWith("INSUFFICIENT_STOCK")) {
+      return res.status(400).json({ error: "Insufficient stock for one or more products" });
+    }
 
     res.status(500).json({
       error: "Failed to create challan",

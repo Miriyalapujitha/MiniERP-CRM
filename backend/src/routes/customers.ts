@@ -1,7 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma";
 import { body, validationResult } from "express-validator";
-import { Prisma } from "@prisma/client";
+import { CustomerStatus, CustomerType } from "@prisma/client";
 
 const router = Router();
 
@@ -236,11 +236,11 @@ router.post(
 
           gstNumber: customerGstNumber || null,
 
-          type: customerType as Prisma.CustomerType,
+          type: customerType as CustomerType,
 
           address: customerAddress,
 
-          status: customerStatus as Prisma.CustomerStatus,
+          status: customerStatus as CustomerStatus,
 
           followUpDate: parsedFollowUpDate,
 
@@ -376,11 +376,11 @@ router.put("/:id", async (req, res) => {
         businessName: customerBusinessName,
         gstNumber: customerGstNumber || null,
 
-        type: customerType as Prisma.CustomerType,
+        type: customerType as CustomerType,
 
         address: customerAddress,
 
-        status: customerStatus as Prisma.CustomerStatus,
+        status: customerStatus as CustomerStatus,
 
         followUpDate: parsedFollowUpDate,
 
